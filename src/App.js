@@ -62,7 +62,7 @@ function App() {
 
     checkServerStatus()
     checkAuth()
-  }, [BASE_URL])
+  }, [BASE_URL, serverStatus])
 
   const handleGoogleLogout = async () => {
     try {
