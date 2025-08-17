@@ -476,11 +476,14 @@ app.post('/logout', async (_req, res) => {
 
 app.post('/api/chat/stream', async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, sessionId } = req.body;
         
         if (!message) {
             return res.status(400).json({ error: 'Message is required' });
         }
+        
+        // Generate unique session ID if not provided
+        const actualSessionId = sessionId || `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         // Set up Server-Sent Events
         res.writeHead(200, {
@@ -491,8 +494,11 @@ app.post('/api/chat/stream', async (req, res) => {
             'Access-Control-Allow-Credentials': 'true'
         });
 
-        // Send initial connection confirmation
-        res.write(`data: ${JSON.stringify({ type: 'connected'})}\n\n`);
+        // Send initial connection confirmation with session ID
+        res.write(`data: ${JSON.stringify({ 
+            type: 'connected',
+            sessionId: actualSessionId 
+        })}\n\n`);
 
         let fullResponse = '';
         
@@ -508,13 +514,15 @@ app.post('/api/chat/stream', async (req, res) => {
                     };
                     res.write(`data: ${JSON.stringify(data)}\n\n`);
                     fullResponse = chunk;
-                }
+                },
+                actualSessionId
             );
 
             // Send completion signal
             res.write(`data: ${JSON.stringify({ 
                 type: 'complete', 
                 content: fullResponse,
+                sessionId: actualSessionId,
                 timestamp: new Date().toISOString()
             })}\n\n`);
             

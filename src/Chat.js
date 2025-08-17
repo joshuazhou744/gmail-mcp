@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
     const [inputMessage, setInputMessage] = useState('')
     const [isLoading, setIsLoading] = useState(false)
+    const [sessionId, setSessionId] = useState(null)
     const messagesEndRef = useRef(null);
     const abortControllerRef = useRef(null);
 
@@ -22,6 +23,7 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
             // clear input message immediately for better UX
             const messageToSend = inputMessage;
             setInputMessage('')
+            
 
             // create abort controller for the request
             abortControllerRef.current = new AbortController();
@@ -34,7 +36,7 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
                 },
                 body: JSON.stringify({ 
                     message: messageToSend,
-                    threadId: 'default' 
+                    sessionId: sessionId // Will be null for first message, server will generate one
                 }),
                 signal: abortControllerRef.current.signal
             });
@@ -86,7 +88,10 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
                         try {
                             const data = JSON.parse(line.slice(6));
                             
-                            if (data.type === 'chunk' || data.type === 'complete') {
+                            if (data.type === 'connected' && data.sessionId) {
+                                // Store the session ID for subsequent messages
+                                setSessionId(data.sessionId);
+                            } else if (data.type === 'chunk' || data.type === 'complete') {
                                 // Skip if this is the user's message echoed back
                                 if (data.content === userMessageToSend && !hasSeenUserMessage) {
                                     hasSeenUserMessage = true;
@@ -94,6 +99,11 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
                                 }
                                 fullResponse = data.content;
                                 updateAgentMessage(fullResponse);
+                                
+                                // Update session ID if provided in complete response
+                                if (data.type === 'complete' && data.sessionId) {
+                                    setSessionId(data.sessionId);
+                                }
                             } else if (data.type === 'error') {
                                 updateErrorMessage(data.error);
                                 break;
@@ -126,7 +136,7 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      };
+    };
       
     useEffect(() => {
         scrollToBottom();

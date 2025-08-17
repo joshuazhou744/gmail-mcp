@@ -13,7 +13,7 @@ dotenv.config();
 const SERVER_URL = process.env.REACT_APP_SERVER_URL;
 const MCP_SERVER_URL = `${SERVER_URL}/mcp`;
 const LLM_MODEL = "gpt-5-nano";
-const DEFAULT_THREAD_ID = "email-assistant-session";
+
 
 // Singleton pattern for agent initialization
 let agentInstance = null;
@@ -56,7 +56,13 @@ const initializeAgent = async () => {
         agentInstance = createReactAgent({
             llm: model,
             tools: tools,
-            checkpointer: new MemorySaver()
+            checkpointer: new MemorySaver(),
+            initialMessages: [
+                {
+                    role: "user",
+                    content: "You are a helpful assistant that can help with email management. Display all outputs nicely formatted in markdown format."
+                }
+            ]
         });
 
         return agentInstance;
@@ -68,7 +74,7 @@ const initializeAgent = async () => {
     }
 };
 
-export const streamAgent = async (message, onChunk, threadId = DEFAULT_THREAD_ID) => {
+export const streamAgent = async (message, onChunk, threadId) => {
     try {
         const agent = await initializeAgent();
         
