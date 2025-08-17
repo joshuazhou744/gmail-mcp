@@ -1,0 +1,39 @@
+# Tool Descriptions for LangGraph React Agent
+# This file contains brief, clear descriptions for each MCP tool
+
+tools:
+  # Email Operations
+  createEmail:
+    description: "Send an email to a specified recipient with subject and message content."
+    inputSchema:
+      receivers:
+        description: "Array of recipient email addresses"
+      carbonCopy:
+        description: "Array of CC recipient email addresses"
+      subject:
+        description: "Email subject line"
+      content:
+        description: "Email body content"
+    
+  searchEmail:
+    description: "Search and list emails from your inbox. Use query parameters to filter by sender, subject, date or content. Returns the IDs of each email as well."
+    inputSchema:
+      query:
+        description: "Gmail search query (e.g. 'from:patreon', 'subject:meeting', 'from:patreon.com newer_than:3d')"
+      maxResults:
+        default: 10
+        description: "Maximum number of results to return"
+
+  getEmail:
+    description: "Get detailed information about a specific email by its ID, including sender, subject, body, and date."
+    inputSchema:
+      emailId:
+        description: "The unique ID of the email to retrieve"
+
+  replyEmail:
+    description: "Reply to a specific email. Provide the email ID and your reply message to send a response."
+    inputSchema:
+      emailId:
+        description: "The unique ID of the email to reply to"
+      content:
+        description: "The reply message content"
