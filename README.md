@@ -1,6 +1,8 @@
 ## dependency installation
 
 ```bash
+npm i
+
 npm i react-router-dom react-markdown
 
 npm i googleapis google-auth-library express zod html-to-text
