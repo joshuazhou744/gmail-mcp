@@ -350,7 +350,7 @@ mcpServer = await createMcpServer();
 
 // CORS middleware
 app.use(cors({
-    origin: "*", // allow all origins
+    origin: "*", // allow all origins for development purposes
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
         'Origin', 
