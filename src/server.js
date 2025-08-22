@@ -587,4 +587,6 @@ const PORT = 3001;
 app.listen(PORT, () => {
     console.log(`Server ready and authenticated as: ${authenticatedUserEmail}\n`);
     console.log('The server will automatically prompt for authentication on startup if needed.\n');
+
+    console.log(`Server running at: https://${process.env.USERNAME}-${PORT}.${process.env.PROXY_DOMAIN}`)
 });
