@@ -20,3 +20,13 @@ npm install \
  react-scripts@5.0.1 \
  zod@3.25.76
 ```
+
+## commands
+
+```bash
+npm install
+
+npm run server
+
+npm start
+```
