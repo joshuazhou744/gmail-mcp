@@ -1,8 +1,6 @@
-# Tool Descriptions for LangGraph React Agent
-# This file contains brief, clear descriptions for each MCP tool
+# Tool Descriptions
 
 tools:
-  # Email Operations
   createEmail:
     description: "Send an email to a specified recipient with subject and message content."
     inputSchema:

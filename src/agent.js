@@ -8,21 +8,23 @@ import { loadMcpTools } from "@langchain/mcp-adapters";
 import dotenv from "dotenv";
 dotenv.config();
 
-// configuration
+// load environment variables and set configuration
 const SERVER_URL = process.env.REACT_APP_SERVER_URL;
 const MCP_SERVER_URL = `${SERVER_URL}/mcp`;
 const LLM_MODEL = "gpt-5-nano";
 
-
-// Singleton pattern for agent initialization
+// singleton pattern variables to ensure only one agent instance exists
 let agentInstance = null;
 let clientInstance = null;
 let isInitializing = false;
 
+// initialize the AI agent with email tools
 const initializeAgent = async () => {
+    // return existing agent if already initialized
     if (agentInstance) return agentInstance;
+    
+    // wait for existing initialization to complete if in progress
     if (isInitializing) {
-        // Wait for existing initialization to complete
         while (isInitializing) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
@@ -32,19 +34,24 @@ const initializeAgent = async () => {
     isInitializing = true;
     
     try {
+        // create the language model instance
         const model = new ChatOpenAI({
             model: LLM_MODEL
         });
 
+        // set up transport to connect to MCP server
         const transport = new StreamableHTTPClientTransport(new URL(MCP_SERVER_URL));
         
+        // create MCP client for email tools
         clientInstance = new Client({
             name: "email-assistant",
             version: "1.0.0"
         });
 
+        // connect the client to the MCP server
         await clientInstance.connect(transport);
         
+        // load email tools from the MCP server
         const tools = await loadMcpTools("email", clientInstance, {
             throwOnLoadError: true,
             prefixToolNameWithServerName: false,
@@ -52,6 +59,7 @@ const initializeAgent = async () => {
             useStandardContentBlocks: false,
         });
 
+        // create the ReAct agent with model, tools, and memory
         agentInstance = createReactAgent({
             llm: model,
             tools: tools,
@@ -63,7 +71,8 @@ const initializeAgent = async () => {
                 }
             ]
         });
-
+        
+        // return the agent instance
         return agentInstance;
     } catch (error) {
         console.error("Failed to initialize agent:", error);
@@ -73,10 +82,13 @@ const initializeAgent = async () => {
     }
 };
 
+// stream agent responses in real-time to the client
 export const streamAgent = async (message, onChunk, threadId) => {
     try {
+        // get the initialized agent instance
         const agent = await initializeAgent();
         
+        // start streaming the agent response
         const stream = await agent.stream(
             { messages: [{ role: "user", content: message }] },
             { 
@@ -86,9 +98,13 @@ export const streamAgent = async (message, onChunk, threadId) => {
         );
 
         let fullResponse = "";
+        
+        // process each chunk of the streaming response
         for await (const chunk of stream) {
             if (chunk.messages && chunk.messages.length > 0) {
                 const lastMessage = chunk.messages[chunk.messages.length - 1];
+                
+                // send new content to client if it has changed
                 if (lastMessage.content && lastMessage.content !== fullResponse) {
                     fullResponse = lastMessage.content;
                     onChunk(fullResponse);

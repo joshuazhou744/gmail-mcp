@@ -3,14 +3,17 @@ import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
+    // Chat state and references
     const [inputMessage, setInputMessage] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [sessionId, setSessionId] = useState(null)
     const messagesEndRef = useRef(null);
     const abortControllerRef = useRef(null);
 
+    // load env variable
     const BASE_URL = process.env.REACT_APP_SERVER_URL
 
+    // send message to the server
     const sendMessage = async () => {
         // check if user is authenticated and message is not empty
         if (!inputMessage.trim() || !isAuthenticated) return
@@ -36,7 +39,7 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
                 },
                 body: JSON.stringify({ 
                     message: messageToSend,
-                    sessionId: sessionId // Will be null for first message, server will generate one
+                    sessionId: sessionId
                 }),
                 signal: abortControllerRef.current.signal
             });
@@ -44,22 +47,26 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
+            
+            // get reader and decoder
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             
+            // track agent message index
             let agentMessageIndex = -1;
             setMessages(prev => {
+                // add agent message placeholderto messages
                 const newMessages = [...prev, `Agent: ...`];
                 agentMessageIndex = newMessages.length - 1;
                 return newMessages;
             })
-
+            
+            // initialize variables
             let fullResponse = '';
             let hasSeenUserMessage = false;
             const userMessageToSend = messageToSend;
 
-            // Create update functions outside the loop to avoid ESLint warnings
+            // update agent message helper function
             const updateAgentMessage = (content) => {
                 setMessages(prev => {
                     const newMessages = [...prev];
@@ -68,6 +75,7 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
                 });
             };
 
+            // update error message helper function
             const updateErrorMessage = (error) => {
                 setMessages(prev => {
                     const newMessages = [...prev];
@@ -76,23 +84,31 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
                 });
             };
 
+            // stream agent response
             while (true) {
+                // read chunk
                 const {done, value} = await reader.read();
                 if (done) break;
-
+                
+                // decode chunk
                 const chunk = decoder.decode(value);
+                // split chunk into lines
                 const lines = chunk.split('\n');
                 
+                // iterate over lines
                 for (const line of lines) {
+                    // check if line starts with data:
                     if (line.startsWith('data: ')) {
                         try {
+                            // parse line
                             const data = JSON.parse(line.slice(6));
                             
+                            // check if type is connected and sessionId is provided
                             if (data.type === 'connected' && data.sessionId) {
-                                // Store the session ID for subsequent messages
+                                // store the session ID for subsequent messages
                                 setSessionId(data.sessionId);
                             } else if (data.type === 'chunk' || data.type === 'complete') {
-                                // Skip if this is the user's message echoed back
+                                // skip if this is the user's message echoed back
                                 if (data.content === userMessageToSend && !hasSeenUserMessage) {
                                     hasSeenUserMessage = true;
                                     continue;
@@ -100,11 +116,12 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
                                 fullResponse = data.content;
                                 updateAgentMessage(fullResponse);
                                 
-                                // Update session ID if provided in complete response
+                                // update session ID if provided in complete response
                                 if (data.type === 'complete' && data.sessionId) {
                                     setSessionId(data.sessionId);
                                 }
                             } else if (data.type === 'error') {
+                                // set error message
                                 updateErrorMessage(data.error);
                                 break;
                             }
@@ -114,8 +131,8 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
                     }
                 }
             }
-            
         } catch (error) {
+            // check if request is aborted
             if (error.name === 'AbortError') {
                 console.log('Request aborted');
             } else {
@@ -127,18 +144,19 @@ function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
         }
     }
 
+    // stop streaming button handler
     const stopStreaming = () => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
         }
         setIsLoading(false);
     }
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
       
     useEffect(() => {
+        // scroll to bottom of the chat after new message is added
+        const scrollToBottom = () => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        };
         scrollToBottom();
     }, [messages]);
     

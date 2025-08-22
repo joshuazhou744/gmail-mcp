@@ -15,20 +15,20 @@ import { streamAgent } from './agent.js';
 
 dotenv.config();
 
-// Initialize CLI authenticator
+// initialize CLI authenticator for Google OAuth
 const cliAuth = new CLIAuthenticator();
 
-// Global auth state
+// global authentication state variables
 let oauth2Client = null;
 let gmailClient = null;
 let authenticatedUserEmail = null;
 
-// Auto-authenticate on startup
+// authenticate with Gmail on server startup
 async function initializeAuthentication() {
     try {
-        console.log('🚀 Initializing Gmail authentication...');
+        console.log('Initializing Gmail authentication...');
         
-        // Authenticate using CLI flow - will prompt if no stored tokens
+        // authenticate using CLI flow will prompt user if no stored tokens
         oauth2Client = await cliAuth.authenticate();
         gmailClient = google.gmail({ version: 'v1', auth: oauth2Client });
         authenticatedUserEmail = await cliAuth.getUserEmail(gmailClient);
@@ -38,12 +38,13 @@ async function initializeAuthentication() {
     } catch (error) {
         console.error('❌ Authentication failed:', error.message);
         console.log('💡 Please ensure you complete the authentication flow when prompted.');
-        process.exit(1); // Exit since we require authentication for this server
+        process.exit(1); // exit since authentication is required for this server
     }
 }
 
+// email tools class that provides Gmail functionality
 class Tools {
-    // Convert string to base64 url (for email encoding)
+    // convert string to base64 url format for Gmail API
     toBase64Url(str) {
         return Buffer.from(str)
             .toString("base64")
@@ -52,20 +53,24 @@ class Tools {
             .replace(/=+$/, "");
     }
 
-    // Check if auth states are set
+    // check if Gmail authentication is properly set up
     checkAuth() {
         return gmailClient && authenticatedUserEmail;
     }
 
+    // create and send a new email
     async createEmail(receivers, carbonCopy, subject, content) {
         try {
+            // check if user is authenticated
             if (!this.checkAuth()) {
                 return "❌ Not authenticated. Please restart the server to authenticate.";
             }
 
+            // format recipients
             const to = receivers.join(", ");
             const cc = carbonCopy && carbonCopy.length > 0 ? carbonCopy.join(", ") : "";
 
+            // construct email message in RFC 2822 format
             const message =
                 `From: ${authenticatedUserEmail}\r\n` +
                 `To: ${to}\r\n` +
@@ -73,8 +78,10 @@ class Tools {
                 `Subject: ${subject}\r\n` +
                 `Content-Type: text/plain; charset="UTF-8"\r\n\r\n${content}`;
 
+            // encode message for Gmail API
             const encodedMessage = this.toBase64Url(message);
 
+            // send the email via Gmail API
             await gmailClient.users.messages.send({
                 userId: "me",
                 requestBody: { raw: encodedMessage },
@@ -87,22 +94,25 @@ class Tools {
         }
     }
 
+    // reply to an existing email
     async replyEmail(emailId, content) {
         try {
+            // check if user is authenticated
             if (!this.checkAuth()) {
                 return "❌ Not authenticated. Please restart the server to authenticate.";
             }
     
+            // get the original email details
             const originalEmail = await this.getEmail(emailId);
             
             if (typeof originalEmail === 'string') {
-                return originalEmail; // Error message from getEmail
+                return originalEmail; // error message from getEmail
             }
     
-            // Extract email addresses from the "From" header
+            // extract sender's email address from the original email
             const fromEmail = originalEmail.sender;
             
-            // Extract email from "Name <email@domain.com>" format
+            // helper function to extract email from "Name <email@domain.com>" format
             const extractEmail = (emailString) => {
                 const match = emailString.match(/<(.+?)>/);
                 return match ? match[1] : emailString;
@@ -110,7 +120,7 @@ class Tools {
             
             const replyTo = extractEmail(fromEmail);
     
-            // Create the reply message
+            // create the reply message with proper headers
             const replyMessage = [
                 `To: ${replyTo}`,
                 `In-Reply-To: ${emailId}`,
@@ -118,8 +128,10 @@ class Tools {
                 content
             ].join('\r\n');
     
+            // encode the reply message
             const encodedMessage = this.toBase64Url(replyMessage);
     
+            // send the reply via Gmail API
             await gmailClient.users.messages.send({
                 userId: "me",
                 requestBody: { 
@@ -135,13 +147,15 @@ class Tools {
         }
     }
 
+    // search for emails in the inbox using Gmail query syntax
     async searchEmail(query, maxResults = 10) {
         try {
+            // check if user is authenticated
             if (!this.checkAuth()) {
                 return "❌ Not authenticated. Please restart the server to authenticate.";
             }
             
-            // Get a list of emails with the query
+            // get list of email IDs matching the search query
             const listResp = await gmailClient.users.messages.list({
                 userId: "me",
                 q: query,
@@ -154,9 +168,10 @@ class Tools {
                 return [];
             }
             
-            // Get the full details for each message
+            // get full details for each email found
             const emailDetails = [];
             for (const message of messages) {
+                // fetch complete email data
                 const detail = await gmailClient.users.messages.get({
                     userId: "me",
                     id: message.id,
@@ -165,11 +180,12 @@ class Tools {
                 const headers = detail.data.payload.headers;
                 const getHeader = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || "";
                 
-                // Get the body
+                // extract email body content
                 let body = "";
                 if (detail.data.payload.body.data) {
                     body = Buffer.from(detail.data.payload.body.data, 'base64').toString();
                 } else if (detail.data.payload.parts) {
+                    // handle multipart messages
                     for (const part of detail.data.payload.parts) {
                         if (part.mimeType === 'text/plain' && part.body.data) {
                             body = Buffer.from(part.body.data, 'base64').toString();
@@ -182,6 +198,7 @@ class Tools {
                     }
                 }
                 
+                // build email summary object
                 emailDetails.push({
                     id: message.id,
                     sender: getHeader("from"),
@@ -199,12 +216,15 @@ class Tools {
         }
     }
 
+    // get complete details of a specific email by ID
     async getEmail(emailId) {
         try {
+            // check if user is authenticated
             if (!this.checkAuth()) {
                 return "❌ Not authenticated. Please restart the server to authenticate.";
             }
             
+            // fetch the email from Gmail API
             const message = await gmailClient.users.messages.get({
                 userId: "me",
                 id: emailId,
@@ -213,11 +233,12 @@ class Tools {
             const headers = message.data.payload.headers;
             const getHeader = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || "";
             
-            // Get the body
+            // extract email body content
             let body = "";
             if (message.data.payload.body.data) {
                 body = Buffer.from(message.data.payload.body.data, 'base64').toString();
             } else if (message.data.payload.parts) {
+                // handle multipart messages
                 for (const part of message.data.payload.parts) {
                     if (part.mimeType === 'text/plain' && part.body.data) {
                         body = Buffer.from(part.body.data, 'base64').toString();
@@ -230,6 +251,7 @@ class Tools {
                 }
             }
             
+            // return structured email data
             return {
                 id: emailId,
                 sender: getHeader("from"),
@@ -246,7 +268,9 @@ class Tools {
     }
 }
 
+// create and configure the MCP server with email tools
 async function createMcpServer() {
+    // load tools configuration from YAML file
     let toolsConfig;
     try {
         const yamlContent = fs.readFileSync('./tools-config.yaml', 'utf8');
@@ -263,8 +287,10 @@ async function createMcpServer() {
         };
     }
 
+    // create instance of email tools
     const tools = new Tools();
 
+    // initialize MCP server with metadata
     const server = new McpServer({
         name: "gmail-mcp-server",
         version: "1.0.0"
@@ -274,6 +300,7 @@ async function createMcpServer() {
         }
     });
 
+    // register createEmail tool with schema validation
     server.registerTool("createEmail",
         {
             title: "Create and send email",
@@ -290,6 +317,7 @@ async function createMcpServer() {
         })
     );
 
+    // register getEmail tool with schema validation
     server.registerTool("getEmail",
         {
             title: "Get email details",
@@ -304,6 +332,7 @@ async function createMcpServer() {
         
     )
 
+    // register replyEmail tool with schema validation
     server.registerTool("replyEmail",
         {
             title: "Reply to email",
@@ -319,6 +348,7 @@ async function createMcpServer() {
         
     )
 
+    // register searchEmail tool with schema validation
     server.registerTool("searchEmail",
         {
             title: "Search inbox for emails",
@@ -336,19 +366,20 @@ async function createMcpServer() {
     return server;
 }
 
+// initialize Express app and server components
 const app = express();
 app.use(express.json());
-const transports = {};
+const transports = {}; // store MCP transport sessions
 let mcpServer = null;
 
-// Initialize authentication on startup - will prompt if needed
-console.log('🔐 Gmail MCP Server Starting...\n');
+// initialize authentication on startup
+console.log('Server Starting...\n');
 await initializeAuthentication();
 
-// Create MCP server after successful authentication
+// create MCP server after successful authentication
 mcpServer = await createMcpServer();
 
-// CORS middleware
+// configure CORS middleware for cross-origin requests
 app.use(cors({
     origin: "*", // allow all origins for development purposes
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -362,18 +393,18 @@ app.use(cors({
     ]
 }));
 
-// MCP endpoint
+// main MCP endpoint for handling tool requests
 app.post('/mcp', async (req, res) => {
     try {
-        // Check for existing session ID
+        // check for existing session ID in headers
         const sessionId = req.headers['mcp-session-id'];
         let transport;
 
         if (sessionId && transports[sessionId]) {
-            // Reuse existing transport
+            // reuse existing transport for this session
             transport = transports[sessionId];
         } else if (!sessionId && isInitializeRequest(req.body)) {
-            // new session initialization request
+            // create new session for initialization request
             transport = new StreamableHTTPServerTransport({
                 sessionIdGenerator: () => randomUUID(),
                 onsessioninitialized: (sessionId) => {
@@ -382,17 +413,17 @@ app.post('/mcp', async (req, res) => {
                 },
             });
 
-            // clean up transport when closed
+            // clean up transport when session closes
             transport.onclose = () => {
                 if (transport.sessionId) {
                     delete transports[transport.sessionId];
                 }
             };
 
-            // connect to the MCP server
+            // connect the transport to the MCP server
             await mcpServer.connect(transport);
         } else {
-            // invalid request
+            // invalid request: no session ID and not initialization
             res.status(400).json({
                 jsonrpc: '2.0',
                 error: {
@@ -404,7 +435,7 @@ app.post('/mcp', async (req, res) => {
             return;
         }
 
-        // handle the request
+        // handle the MCP request through the transport
         await transport.handleRequest(req, res, req.body);
     } catch (error) {
         console.error('MCP request error:', error);
@@ -422,7 +453,7 @@ app.post('/mcp', async (req, res) => {
     }
 });
 
-// Health endpoint
+// health check endpoint to monitor server status
 app.get('/health', (_req, res) => {
     const health = {
         status: 'ok',
@@ -440,7 +471,7 @@ app.get('/health', (_req, res) => {
     res.json(health);
 });
 
-// Simple status endpoint
+// simple authentication status endpoint for frontend
 app.get('/status', (_req, res) => {
     res.json({ 
         authenticated: !!gmailClient, 
@@ -449,18 +480,19 @@ app.get('/status', (_req, res) => {
     });
 });
 
-// Logout endpoint (clears tokens and exits - requires restart)
+// logout endpoint: clears stored tokens and exits server
 app.post('/logout', async (_req, res) => {
     try {
+        // clear stored authentication tokens
         await cliAuth.clearStoredTokens();
-        console.log('✅ Logged out successfully. Server will exit - restart to re-authenticate.');
+        console.log('✅ Logged out successfully. Server will exit, restart to re-authenticate.');
         
         res.json({ 
             success: true, 
             message: 'Logged out successfully. Please restart the server to re-authenticate.' 
         });
         
-        // Exit after a short delay to allow response to be sent
+        // exit server after short delay to allow response to be sent
         setTimeout(() => {
             process.exit(0);
         }, 1000);
@@ -474,18 +506,20 @@ app.post('/logout', async (_req, res) => {
     }
 });
 
+// streaming chat endpoint for realtime AI agent responses
 app.post('/api/chat/stream', async (req, res) => {
     try {
         const { message, sessionId } = req.body;
         
+        // validate that message is provided
         if (!message) {
             return res.status(400).json({ error: 'Message is required' });
         }
         
-        // Generate unique session ID if not provided
+        // generate unique session ID if not provided
         const actualSessionId = sessionId || `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-        // Set up Server-Sent Events
+        // set up Server-Sent Events headers for streaming
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -494,7 +528,7 @@ app.post('/api/chat/stream', async (req, res) => {
             'Access-Control-Allow-Credentials': 'true'
         });
 
-        // Send initial connection confirmation with session ID
+        // send initial connection confirmation with session ID
         res.write(`data: ${JSON.stringify({ 
             type: 'connected',
             sessionId: actualSessionId 
@@ -503,10 +537,11 @@ app.post('/api/chat/stream', async (req, res) => {
         let fullResponse = '';
         
         try {
+            // stream agent response with realtime updates
             await streamAgent(
                 message,
                 (chunk) => {
-                    // Send incremental updates
+                    // send incremental response chunks to client
                     const data = {
                         type: 'chunk',
                         content: chunk,
@@ -518,7 +553,7 @@ app.post('/api/chat/stream', async (req, res) => {
                 actualSessionId
             );
 
-            // Send completion signal
+            // send completion signal with final response
             res.write(`data: ${JSON.stringify({ 
                 type: 'complete', 
                 content: fullResponse,
@@ -527,6 +562,7 @@ app.post('/api/chat/stream', async (req, res) => {
             })}\n\n`);
             
         } catch (streamError) {
+            // send error message to client
             res.write(`data: ${JSON.stringify({ 
                 type: 'error', 
                 error: streamError.message,
@@ -545,13 +581,10 @@ app.post('/api/chat/stream', async (req, res) => {
     }
 });
 
+// start the server
 const PORT = 3001;
 
 app.listen(PORT, () => {
-    console.log(`\n🚀 Gmail MCP Server running on port ${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
-    console.log(`📈 Status: http://localhost:${PORT}/status`);
-    console.log(`✅ Server ready and authenticated as: ${authenticatedUserEmail}`);
-    console.log('\n💡 The server will automatically prompt for authentication on startup if needed.');
-    console.log('🔄 Use POST /logout to clear tokens and restart for re-authentication.\n');
+    console.log(`Server ready and authenticated as: ${authenticatedUserEmail}\n`);
+    console.log('The server will automatically prompt for authentication on startup if needed.\n');
 });

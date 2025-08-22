@@ -18,16 +18,18 @@ function App() {
     // check is server is even running
     const checkServerStatus = async () => {
       try {
-        // get status endpoint of the server
+        // get health endpoint of the server
         const response = await fetch(`${BASE_URL}/health`, {
           method: "GET",
           headers: { "Content-Type": "application/json" }
         })
         
         if (response.ok) {
+          // if server is running, set the server status
           const data = await response.json()
           setServerStatus(data.status === 'ok')
         } else {
+          // else set server status to false
           setServerStatus(false)
         }
       } catch (error) {
@@ -39,17 +41,19 @@ function App() {
     // check is server is authenticated
     const checkAuth = async () => {
       try {
-        // get authentication status of the 
+        // get authentication status of the server
         const response = await fetch(`${BASE_URL}/status`, {
           method: "GET",
           headers: { "Content-Type": "application/json" }
         })
         
         if (response.ok) {
+          // if server is authenticated, set the authentication status and user email
           const data = await response.json()
           setIsAuthenticated(data.authenticated)
           setUserEmail(data.userEmail)
         } else {
+          // else set the authentication status and user email to false and empty
           setIsAuthenticated(false)
           setUserEmail('')
         }
@@ -60,10 +64,12 @@ function App() {
       }
     }
 
+    // check if server is running and authenticated
     checkServerStatus()
     checkAuth()
   }, [BASE_URL, serverStatus])
 
+  // handle logout request
   const handleGoogleLogout = async () => {
     try {
       // send logout request to the server
@@ -74,6 +80,8 @@ function App() {
     } catch (error) {
       console.log('Logout request failed: ', error)
     }
+    
+    // set the authentication status and user email to false and empty
     setIsAuthenticated(false)
     setUserEmail('')
   }
