@@ -1,4 +1,19 @@
-## dependency installation
+## google oauth setup
+
+1. Go to [https://console.cloud.google.com/](https://console.cloud.google.com/apis/dashboard) and make a new project with a Desktop client ID
+2. Make a `.env` copied from `.env.example` and fill in the client ID and secret, set the server url to `http://localhost:3001`
+
+## quickstart
+
+```bash
+npm install
+
+npm run server
+
+npm start
+```
+
+## version pinned dependencies
 
 ```bash
 npm install \
@@ -19,14 +34,4 @@ npm install \
  react-router-dom@7.8.0 \
  react-scripts@5.0.1 \
  zod@3.25.76
-```
-
-## commands
-
-```bash
-npm install
-
-npm run server
-
-npm start
 ```
