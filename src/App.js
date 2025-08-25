@@ -102,9 +102,9 @@ function App() {
       <Routes>
         <Route path="/" element={
           <div className="card">
-            {!isAuthenticated ? (
+            {!isAuthenticated || !serverStatus ? (
               <div>
-                Authenticate the MCP server to use email tools
+                Start and authenticate the MCP server to use email tools
               </div>
             ) : (
               <div>
