@@ -8,7 +8,6 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [serverStatus, setServerStatus] = useState(false)
-  const [messages, setMessages] = useState([])
 
   // load env variable
   const BASE_URL = process.env.REACT_APP_SERVER_URL
@@ -119,7 +118,7 @@ function App() {
             )}
           </div>
         } />
-        <Route path="/chat" element={<Chat isAuthenticated={isAuthenticated} userEmail={userEmail} messages={messages} setMessages={setMessages} />} />
+        <Route path="/chat" element={<Chat isAuthenticated={isAuthenticated} userEmail={userEmail}/>}/>
       </Routes>
     </div>
   );

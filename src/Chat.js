@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 
-function Chat({ isAuthenticated, userEmail, messages, setMessages }) {
+function Chat({ isAuthenticated, userEmail }) {
     // Chat state and references
+    const [messages, setMessages] = useState([])
     const [inputMessage, setInputMessage] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [sessionId, setSessionId] = useState(null)
