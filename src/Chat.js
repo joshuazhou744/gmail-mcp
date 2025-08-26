@@ -100,7 +100,7 @@ function Chat({ isAuthenticated, userEmail }) {
                     // check if line starts with data:
                     if (line.startsWith('data: ')) {
                         try {
-                            // parse line
+                            // parse line without "data: "
                             const data = JSON.parse(line.slice(6));
                             
                             // check if type is connected and sessionId is provided
@@ -242,4 +242,4 @@ function Chat({ isAuthenticated, userEmail }) {
     )
 }
 
-export default Chat
+export default Chat;

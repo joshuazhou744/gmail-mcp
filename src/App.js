@@ -13,7 +13,7 @@ function App() {
   const BASE_URL = process.env.REACT_APP_SERVER_URL
 
   useEffect(() => {
-    // check is server is even running
+    // check if server is even running
     const checkServerStatus = async () => {
       try {
         // get health endpoint of the server
@@ -36,7 +36,7 @@ function App() {
       }
     }
     
-    // check is server is authenticated
+    // check if server is authenticated
     const checkAuth = async () => {
       try {
         // get authentication status of the server
@@ -100,22 +100,43 @@ function App() {
       <Routes>
         <Route path="/" element={
           <div className="card">
-            {!isAuthenticated || !serverStatus ? (
-              <div>
-                Start and authenticate the MCP server to use email tools
-              </div>
-            ) : (
-              <div>
-                <h3>Authenticated as: {userEmail}</h3>
+            <div className="status-section">
+              <h3>Server Status</h3>
+              {serverStatus ? (
                 <p className="success-message">
-                  ✓ Ready to use email tools!
+                  MCP Server is running
                 </p>
-                <button 
-                  onClick={handleGoogleLogout}
-                  className="pointer-button button"
-                >Logout</button>
-              </div>
-            )}
+              ) : (
+                <p className="error-message">
+                  MCP Server is not running, please start the server
+                </p>
+              )}
+            </div>
+
+            <div className="status-section">
+              <h3>Authentication Status</h3>
+              {!serverStatus ? (
+                <p className="warning-message">
+                  ⏳ Start server first to check authentication
+                </p>
+              ) : isAuthenticated ? (
+                <div>
+                  <p className="success-message">
+                    ✅ Authenticated as: {userEmail}
+                  </p>
+                  <button 
+                    onClick={handleGoogleLogout}
+                    className="pointer-button button"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <p className="error-message">
+                  ❌ Not authenticated - please authenticate with Gmail
+                </p>
+              )}
+            </div>
           </div>
         } />
         <Route path="/chat" element={<Chat isAuthenticated={isAuthenticated} userEmail={userEmail}/>}/>
