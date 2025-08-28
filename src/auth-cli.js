@@ -8,6 +8,7 @@ import { promisify } from 'util';
 
 dotenv.config();
 
+// convert callback-based exec to Promise-based for async/await compatibility
 const execAsync = promisify(exec);
 
 // get current file directory for token storage path
@@ -20,9 +21,7 @@ const TOKEN_PATH = path.join(__dirname, '../.gmail-tokens.json');
 // required Gmail permissions for the application
 const SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.send',
-    'https://www.googleapis.com/auth/gmail.compose',
-    'https://www.googleapis.com/auth/gmail.modify'
+    'https://www.googleapis.com/auth/gmail.send'
 ];
 
 // handles Google OAuth authentication for Gmail access
@@ -35,9 +34,6 @@ class CLIAuthenticator {
         // validate that credentials are provided
         if (!this.clientId || !this.clientSecret) {
             console.error('❌ Missing Google OAuth credentials in environment variables');
-            console.log('💡 Make sure your .env file contains:');
-            console.log('   GOOGLE_CLIENT_ID=your_client_id');
-            console.log('   GOOGLE_CLIENT_SECRET=your_client_secret');
             throw new Error('Missing Google OAuth credentials in environment variables');
         }
     }
@@ -94,7 +90,7 @@ class CLIAuthenticator {
     async performInstalledAppFlow() {
         console.log('\n🔐 Starting Google OAuth2 Installed Application Flow...\n');
 
-        // create OAuth2 client for authentication
+        // create OAuth2 client for first time authentication (no stored tokens)
         const oauth2Client = new google.auth.OAuth2(
             this.clientId,
             this.clientSecret,
@@ -114,9 +110,6 @@ class CLIAuthenticator {
         console.log('2. Sign in to your Google account');
         console.log('3. Grant permissions to the application');
         console.log('4. Copy the authorization code from the page\n');
-
-        // try to open the URL automatically in browser
-        await this.openUrl(authUrl);
 
         // prompt user to enter the authorization code
         const authCode = await this.promptForAuthCode();
@@ -151,29 +144,6 @@ class CLIAuthenticator {
         }
     }
 
-    // attempt to open authorization URL in default browser
-    async openUrl(url) {
-        try {
-            // determine the correct command for each operating system
-            const platform = process.platform;
-            let command;
-
-            if (platform === 'darwin') {
-                command = `open "${url}"`;
-            } else if (platform === 'win32') {
-                command = `start "${url}"`;
-            } else {
-                command = `xdg-open "${url}"`;
-            }
-
-            // execute the browser open command
-            await execAsync(command);
-            console.log('🌐 Opening authorization URL in your default browser...\n');
-        } catch (error) {
-            console.log('⚠️  Could not open browser automatically. Please copy and paste the URL above.\n');
-        }
-    }
-
     // prompt user to enter the authorization code from browser
     async promptForAuthCode() {
         return new Promise((resolve) => {
@@ -196,19 +166,18 @@ class CLIAuthenticator {
     // main authentication method, tries stored tokens first, then prompts for new auth
     async authenticate() {
         console.log('🔍 Checking for stored authentication...');
-        
+
         // try to use existing stored tokens first
         let oauth2Client = await this.createAuthenticatedClient();
-        
+
         if (oauth2Client) {
             console.log('✅ Using stored authentication');
-            return oauth2Client;
-        }
+        } else {
+			// no valid stored tokens found, start new OAuth flow
+    	    console.log('🔐 No valid stored authentication found');
+	        oauth2Client = await this.performInstalledAppFlow();
+		}
 
-        // no valid stored tokens found, start new OAuth flow
-        console.log('🔐 No valid stored authentication found');
-        oauth2Client = await this.performInstalledAppFlow();
-        
         return oauth2Client;
     }
 

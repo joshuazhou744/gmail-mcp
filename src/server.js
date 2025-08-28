@@ -485,13 +485,14 @@ app.post('/logout', async (_req, res) => {
     try {
         // clear stored authentication tokens
         await cliAuth.clearStoredTokens();
-        console.log('✅ Logged out successfully. Server will exit, restart to re-authenticate.');
+        console.log('✅ Logged out successfully.');
         
+        // send response to client
         res.json({ 
             success: true, 
             message: 'Logged out successfully. Please restart the server to re-authenticate.' 
         });
-        
+
         // exit server after short delay to allow response to be sent
         setTimeout(() => {
             process.exit(0);
