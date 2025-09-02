@@ -1,5 +1,4 @@
 # Tool Descriptions
-
 tools:
   createEmail:
     description: "Send an email to a specified recipient with subject and message content."

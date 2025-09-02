@@ -1,25 +1,24 @@
 import express from "express";
+import { randomUUID } from 'crypto';
+import cors from "cors";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js"
 import { z } from "zod";
-import { randomUUID } from 'crypto';
-import { google } from "googleapis";
 import { htmlToText } from 'html-to-text';
 import CLIAuthenticator from './auth-cli.js';
 import fs from 'fs';
 import yaml from "js-yaml";
-import dotenv from "dotenv";
-import cors from "cors";
 import { streamAgent } from './agent.js';
+import dotenv from "dotenv";
 
+// load environment variables
 dotenv.config();
 
 // initialize CLI authenticator for Google OAuth
 const cliAuth = new CLIAuthenticator();
 
 // global authentication state variables
-let oauth2Client = null;
 let gmailClient = null;
 let authenticatedUserEmail = null;
 
@@ -29,8 +28,7 @@ async function initializeAuthentication() {
         console.log('Initializing Gmail authentication...');
         
         // authenticate using CLI flow will prompt user if no stored tokens
-        oauth2Client = await cliAuth.authenticate();
-        gmailClient = google.gmail({ version: 'v1', auth: oauth2Client });
+        gmailClient = await cliAuth.getGmailClient();
         authenticatedUserEmail = await cliAuth.getUserEmail(gmailClient);
         
         console.log(`✅ Successfully authenticated as: ${authenticatedUserEmail}`);
@@ -63,7 +61,11 @@ class Tools {
         try {
             // check if user is authenticated
             if (!this.checkAuth()) {
-                return "❌ Not authenticated. Please restart the server to authenticate.";
+                return {
+                    success: false,
+                    error: "Not authenticated. Please restart the server to authenticate.",
+                    data: null
+                };
             }
 
             // format recipients
@@ -82,137 +84,29 @@ class Tools {
             const encodedMessage = this.toBase64Url(message);
 
             // send the email via Gmail API
-            await gmailClient.users.messages.send({
+            const response = await gmailClient.users.messages.send({
                 userId: "me",
                 requestBody: { raw: encodedMessage },
             });
 
-            return `Email sent successfully!`;
+            return {
+                success: true,
+                message: "Email sent successfully!",
+                data: {
+                    messageId: response.data.id,
+                    threadId: response.data.threadId,
+                    recipients: receivers,
+                    carbonCopy: carbonCopy || [],
+                    subject: subject
+                }
+            };
         } catch (error) {
             console.error("Error sending email:", error);
-            return `Failed to send email: ${error.message}`;
-        }
-    }
-
-    // reply to an existing email
-    async replyEmail(emailId, content) {
-        try {
-            // check if user is authenticated
-            if (!this.checkAuth()) {
-                return "❌ Not authenticated. Please restart the server to authenticate.";
-            }
-    
-            // get the original email details
-            const originalEmail = await this.getEmail(emailId);
-            
-            if (typeof originalEmail === 'string') {
-                return originalEmail; // error message from getEmail
-            }
-    
-            // extract sender's email address from the original email
-            const fromEmail = originalEmail.sender;
-            
-            // helper function to extract email from "Name <email@domain.com>" format
-            const extractEmail = (emailString) => {
-                const match = emailString.match(/<(.+?)>/);
-                return match ? match[1] : emailString;
+            return {
+                success: false,
+                error: `Failed to send email: ${error.message}`,
+                data: null
             };
-            
-            const replyTo = extractEmail(fromEmail);
-    
-            // create the reply message with proper headers
-            const replyMessage = [
-                `To: ${replyTo}`,
-                `In-Reply-To: ${emailId}`,
-                '',
-                content
-            ].join('\r\n');
-    
-            // encode the reply message
-            const encodedMessage = this.toBase64Url(replyMessage);
-    
-            // send the reply via Gmail API
-            await gmailClient.users.messages.send({
-                userId: "me",
-                requestBody: { 
-                    raw: encodedMessage,
-                    threadId: originalEmail.threadId 
-                },
-            });
-    
-            return "Reply sent successfully!";
-        } catch (error) {
-            console.error("Error sending reply:", error);
-            return `Failed to send reply: ${error.message}`;
-        }
-    }
-
-    // search for emails in the inbox using Gmail query syntax
-    async searchEmail(query, maxResults = 10) {
-        try {
-            // check if user is authenticated
-            if (!this.checkAuth()) {
-                return "❌ Not authenticated. Please restart the server to authenticate.";
-            }
-            
-            // get list of email IDs matching the search query
-            const listResp = await gmailClient.users.messages.list({
-                userId: "me",
-                q: query,
-                maxResults: maxResults,
-            });
-            
-            const messages = listResp.data.messages || [];
-            
-            if (messages.length === 0) {
-                return [];
-            }
-            
-            // get full details for each email found
-            const emailDetails = [];
-            for (const message of messages) {
-                // fetch complete email data
-                const detail = await gmailClient.users.messages.get({
-                    userId: "me",
-                    id: message.id,
-                });
-                
-                const headers = detail.data.payload.headers;
-                const getHeader = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || "";
-                
-                // extract email body content
-                let body = "";
-                if (detail.data.payload.body.data) {
-                    body = Buffer.from(detail.data.payload.body.data, 'base64').toString();
-                } else if (detail.data.payload.parts) {
-                    // handle multipart messages
-                    for (const part of detail.data.payload.parts) {
-                        if (part.mimeType === 'text/plain' && part.body.data) {
-                            body = Buffer.from(part.body.data, 'base64').toString();
-                            break;
-                        } else if (part.mimeType === 'text/html' && part.body.data) {
-                            const htmlBody = Buffer.from(part.body.data, 'base64').toString();
-                            body = htmlToText(htmlBody);
-                            break;
-                        }
-                    }
-                }
-                
-                // build email summary object
-                emailDetails.push({
-                    id: message.id,
-                    sender: getHeader("from"),
-                    receiver: getHeader("to"),
-                    subject: getHeader("subject"),
-                    date: getHeader("date"),
-                    body: body.substring(0, 500) + (body.length > 500 ? "..." : "")
-                });
-            }
-            
-            return emailDetails;
-        } catch (error) {
-            console.error("Error searching emails:", error);
-            return `Failed to search emails: ${error.message}`;
         }
     }
 
@@ -221,7 +115,11 @@ class Tools {
         try {
             // check if user is authenticated
             if (!this.checkAuth()) {
-                return "❌ Not authenticated. Please restart the server to authenticate.";
+                return {
+                    success: false,
+                    error: "Not authenticated. Please restart the server to authenticate.",
+                    data: null
+                };
             }
             
             // fetch the email from Gmail API
@@ -253,19 +151,178 @@ class Tools {
             
             // return structured email data
             return {
-                id: emailId,
-                sender: getHeader("from"),
-                receiver: getHeader("to"),
-                subject: getHeader("subject"),
-                date: getHeader("date"),
-                body: body,
-                threadId: message.data.threadId
+                success: true,
+                message: "Email retrieved successfully",
+                data: {
+                    id: emailId,
+                    sender: getHeader("from"),
+                    receiver: getHeader("to"),
+                    subject: getHeader("subject"),
+                    date: getHeader("date"),
+                    body: body,
+                    threadId: message.data.threadId
+                }
             };
         } catch (error) {
             console.error("Error getting email:", error);
-            return `Failed to get email: ${error.message}`;
+            return {
+                success: false,
+                error: `Failed to get email: ${error.message}`,
+                data: null
+            };
         }
     }
+
+    // reply to an existing email
+    async replyEmail(emailId, content) {
+        try {
+            // check if user is authenticated
+            if (!this.checkAuth()) {
+                return {
+                    success: false,
+                    error: "Not authenticated. Please restart the server to authenticate.",
+                    data: null
+                };
+            }
+    
+            // get the original email details
+            const originalEmail = await this.getEmail(emailId);
+            
+            if (!originalEmail.success) {
+                return originalEmail; // return the error response from getEmail
+            }
+    
+            // extract sender's email address from the original email
+            const fromEmail = originalEmail.data.sender;
+            
+            // helper function to extract email from "Name <email@domain.com>" format
+            const extractEmail = (emailString) => {
+                const match = emailString.match(/<(.+?)>/);
+                return match ? match[1] : emailString;
+            };
+            
+            const replyTo = extractEmail(fromEmail);
+    
+            // create the reply message with proper headers
+            const replyMessage = [
+                `To: ${replyTo}`,
+                `In-Reply-To: ${emailId}`,
+                '',
+                content
+            ].join('\r\n');
+    
+            // encode the reply message
+            const encodedMessage = this.toBase64Url(replyMessage);
+    
+            // send the reply via Gmail API
+            const response = await gmailClient.users.messages.send({
+                userId: "me",
+                requestBody: { 
+                    raw: encodedMessage,
+                    threadId: originalEmail.data.threadId 
+                },
+            });
+    
+            return {
+                success: true,
+                message: "Reply sent successfully!",
+                data: {
+                    messageId: response.data.id,
+                    threadId: response.data.threadId,
+                    replyTo: replyTo,
+                    originalEmailId: emailId,
+                    replyContent: content
+                }
+            };
+        } catch (error) {
+            console.error("Error sending reply:", error);
+            return {
+                success: false,
+                error: `Failed to send reply: ${error.message}`,
+                data: null
+            };
+        }
+    }
+
+    // search for emails in the inbox using Gmail query syntax
+    async searchEmail(query, maxResults = 10) {
+        try {
+            // check if user is authenticated
+            if (!this.checkAuth()) {
+                return {
+                    success: false,
+                    error: "Not authenticated. Please restart the server to authenticate.",
+                    data: null
+                };
+            }
+            
+            // get list of email IDs matching the search query
+            const listResp = await gmailClient.users.messages.list({
+                userId: "me",
+                q: query,
+                maxResults: maxResults,
+            });
+            
+            const messages = listResp.data.messages || [];
+            
+            if (messages.length === 0) {
+                return {
+                    success: true,
+                    message: "No emails found matching the search query",
+                    data: {
+                        query: query,
+                        maxResults: maxResults,
+                        totalFound: 0,
+                        emails: []
+                    }
+                };
+            }
+            
+            // get full details for each email found
+            const emailDetails = [];
+            for (const {id} of messages) {
+                const emailResponse = await this.getEmail(id);
+
+                // check if getEmail failed
+                if (!emailResponse.success) {
+                    return emailResponse; // return the error response
+                }
+                
+                const email = emailResponse.data;
+                
+                // build email summary object
+                emailDetails.push({
+                    id: email.id,
+                    sender: email.sender,
+                    receiver: email.receiver,
+                    subject: email.subject,
+                    date: email.date,
+                    // limit body to 500 characters for performance
+                    body: email.body.substring(0, 500) + (email.body.length > 500 ? "..." : ""),
+                    threadId: email.threadId
+                });
+            }
+            
+            return {
+                success: true,
+                message: `Found ${emailDetails.length} emails matching the search query`,
+                data: {
+                    query: query,
+                    maxResults: maxResults,
+                    totalFound: emailDetails.length,
+                    emails: emailDetails
+                }
+            };
+        } catch (error) {
+            console.error("Error searching emails:", error);
+            return {
+                success: false,
+                error: `Failed to search emails: ${error.message}`,
+                data: null
+            };
+        }
+    }
+
 }
 
 // create and configure the MCP server with email tools
@@ -276,15 +333,9 @@ async function createMcpServer() {
         const yamlContent = fs.readFileSync('./tools-config.yaml', 'utf8');
         toolsConfig = yaml.load(yamlContent);
     } catch (error) {
-        console.warn('Warning: Could not load tools-config.yaml, using defaults');
-        toolsConfig = {
-            tools: {
-                createEmail: { description: 'Create and send an email' },
-                replyEmail: { description: 'Reply to an email' },
-                getEmail: { description: 'Get an email by ID' },
-                searchEmail: { description: 'Search emails in inbox' }
-            }
-        };
+        // return null if tools-config.yaml is not found
+        console.warn('Warning: Could not load tools-config.yaml. Please ensure the file exists.');
+        return null;
     }
 
     // create instance of email tools
@@ -312,9 +363,15 @@ async function createMcpServer() {
                 content: z.string().describe(toolsConfig.tools.createEmail.inputSchema.content.description)
             }
         },
-        async ({receivers, carbonCopy, subject, content}) => ({
-            content: [{type: "text", text: await tools.createEmail(receivers, carbonCopy || [], subject, content)}]
-        })
+        async ({receivers, carbonCopy, subject, content}) => {
+            const result = await tools.createEmail(receivers, carbonCopy || [], subject, content);
+            return {
+                content: [{
+                    type: "text", 
+                    text: JSON.stringify(result, null, 2)
+                }]
+            };
+        }
     );
 
     // register getEmail tool with schema validation
@@ -326,11 +383,16 @@ async function createMcpServer() {
                 emailId: z.string().describe(toolsConfig.tools.getEmail.inputSchema.emailId.description)
             }
         },
-        async ({emailId}) => ({
-            content: [{type: "text", text: JSON.stringify(await tools.getEmail(emailId))}]
-        })
-        
-    )
+        async ({emailId}) => {
+            const result = await tools.getEmail(emailId);
+            return {
+                content: [{
+                    type: "text", 
+                    text: JSON.stringify(result, null, 2)
+                }]
+            };
+        }
+    );
 
     // register replyEmail tool with schema validation
     server.registerTool("replyEmail",
@@ -342,11 +404,16 @@ async function createMcpServer() {
                 content: z.string().describe(toolsConfig.tools.replyEmail.inputSchema.content.description)
             }
         },
-        async ({emailId, content}) => ({
-            content: [{type: "text", text: JSON.stringify(await tools.replyEmail(emailId, content))}]
-        })
-        
-    )
+        async ({emailId, content}) => {
+            const result = await tools.replyEmail(emailId, content);
+            return {
+                content: [{
+                    type: "text", 
+                    text: JSON.stringify(result, null, 2)
+                }]
+            };
+        }
+    );
 
     // register searchEmail tool with schema validation
     server.registerTool("searchEmail",
@@ -358,40 +425,47 @@ async function createMcpServer() {
                 maxResults: z.number().optional().default(10).describe(toolsConfig.tools.searchEmail.inputSchema.maxResults.description)
             }
         },
-        async ({query, maxResults}) => ({
-            content: [{type: "text", text: JSON.stringify(await tools.searchEmail(query, maxResults))}]
-        })
-    )
+        async ({query, maxResults}) => {
+            const result = await tools.searchEmail(query, maxResults);
+            return {
+                content: [{
+                    type: "text", 
+                    text: JSON.stringify(result, null, 2)
+                }]
+            };
+        }
+    );
 
     return server;
 }
 
-// initialize Express app and server components
+// initialize Express app
 const app = express();
 app.use(express.json());
-const transports = {}; // store MCP transport sessions
-let mcpServer = null;
+
+// configure CORS middleware for cross-origin requests
+app.use(cors({
+    origin: "http://localhost:3000", // allow requests from our React app
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+        'Origin',
+        'X-Requested-With',
+        'Content-Type',
+        'Accept',
+        'Authorization',
+        'mcp-session-id'
+    ]
+}));
 
 // initialize authentication on startup
 console.log('Server Starting...\n');
 await initializeAuthentication();
 
+// initialize server components
+const transports = {}; // store MCP transport sessions
+let mcpServer = null;
 // create MCP server after successful authentication
 mcpServer = await createMcpServer();
-
-// configure CORS middleware for cross-origin requests
-app.use(cors({
-    origin: "*", // allow all origins for development purposes
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-        'Origin', 
-        'X-Requested-With', 
-        'Content-Type', 
-        'Accept', 
-        'Authorization', 
-        'mcp-session-id'
-    ]
-}));
 
 // main MCP endpoint for handling tool requests
 app.post('/mcp', async (req, res) => {
@@ -423,7 +497,7 @@ app.post('/mcp', async (req, res) => {
             // connect the transport to the MCP server
             await mcpServer.connect(transport);
         } else {
-            // invalid request: no session ID and not initialization
+            // invalid request: no session ID and no session initialization
             res.status(400).json({
                 jsonrpc: '2.0',
                 error: {
@@ -451,24 +525,6 @@ app.post('/mcp', async (req, res) => {
             });
         }
     }
-});
-
-// health check endpoint to monitor server status
-app.get('/health', (_req, res) => {
-    const health = {
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        version: '1.0.0',
-        services: {
-            mcp: mcpServer ? 'connected' : 'disconnected',
-            auth: gmailClient ? 'authenticated' : 'not_authenticated',
-            gmail: gmailClient ? 'connected' : 'disconnected'
-        },
-        user: authenticatedUserEmail,
-        activeConnections: Object.keys(transports).length
-    };
-    
-    res.json(health);
 });
 
 // simple authentication status endpoint for frontend
@@ -505,6 +561,14 @@ app.post('/logout', async (_req, res) => {
             message: error.message 
         });
     }
+});
+
+// health check endpoint to monitor server status
+app.get('/health', (_req, res) => {
+    const health = {
+        status: 'ok'
+    };
+    res.json(health);
 });
 
 // streaming chat endpoint for realtime AI agent responses
