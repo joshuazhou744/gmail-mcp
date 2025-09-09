@@ -536,6 +536,14 @@ app.get('/status', (_req, res) => {
     });
 });
 
+// health check endpoint to monitor server status
+app.get('/health', (_req, res) => {
+    const health = {
+        status: 'ok'
+    };
+    res.json(health);
+});
+
 // logout endpoint: clears stored tokens and exits server
 app.post('/logout', async (_req, res) => {
     try {
@@ -561,14 +569,6 @@ app.post('/logout', async (_req, res) => {
             message: error.message 
         });
     }
-});
-
-// health check endpoint to monitor server status
-app.get('/health', (_req, res) => {
-    const health = {
-        status: 'ok'
-    };
-    res.json(health);
 });
 
 // streaming chat endpoint for realtime AI agent responses
