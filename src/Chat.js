@@ -26,7 +26,7 @@ function Chat({ isAuthenticated, userEmail }) {
             // clear input message immediately for better UX
             const messageToSend = inputMessage;
             setInputMessage('')
-            
+
 
             // create abort controller for the request
             abortControllerRef.current = new AbortController();
@@ -37,7 +37,7 @@ function Chat({ isAuthenticated, userEmail }) {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     message: messageToSend,
                     sessionId: sessionId
                 }),
@@ -47,11 +47,11 @@ function Chat({ isAuthenticated, userEmail }) {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            
+
             // get reader and decoder
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            
+
             // track agent message index
             let agentMessageIndex = -1;
             setMessages(prev => {
@@ -60,7 +60,7 @@ function Chat({ isAuthenticated, userEmail }) {
                 agentMessageIndex = newMessages.length - 1;
                 return newMessages;
             })
-            
+
             // initialize variables
             let fullResponse = '';
             let hasSeenUserMessage = false;
@@ -89,12 +89,12 @@ function Chat({ isAuthenticated, userEmail }) {
                 // read chunk
                 const {done, value} = await reader.read();
                 if (done) break;
-                
+
                 // decode chunk
                 const chunk = decoder.decode(value);
                 // split chunk into lines
                 const lines = chunk.split('\n');
-                
+
                 // iterate over lines
                 for (const line of lines) {
                     // check if line starts with data:
@@ -102,7 +102,7 @@ function Chat({ isAuthenticated, userEmail }) {
                         try {
                             // parse line without "data: "
                             const data = JSON.parse(line.slice(6));
-                            
+
                             // check if type is connected and sessionId is provided
                             if (data.type === 'connected' && data.sessionId) {
                                 // store the session ID for subsequent messages
@@ -115,7 +115,7 @@ function Chat({ isAuthenticated, userEmail }) {
                                 }
                                 fullResponse = data.content;
                                 updateAgentMessage(fullResponse);
-                                
+
                                 // update session ID if provided in complete response
                                 if (data.type === 'complete' && data.sessionId) {
                                     setSessionId(data.sessionId);
@@ -151,7 +151,7 @@ function Chat({ isAuthenticated, userEmail }) {
         }
         setIsLoading(false);
     }
-      
+
     useEffect(() => {
         // scroll to bottom of the chat after new message is added
         const scrollToBottom = () => {
@@ -159,11 +159,11 @@ function Chat({ isAuthenticated, userEmail }) {
         };
         scrollToBottom();
     }, [messages]);
-    
+
     return (
         <div className="chat-container">
             <h2>Email Management Chat</h2>
-      
+
             {!isAuthenticated ? (
                 <div className="auth-required">
                     <h3>Authentication Required</h3>
@@ -174,7 +174,7 @@ function Chat({ isAuthenticated, userEmail }) {
                     <div className="auth-message">
                         ✓ Authenticated as: {userEmail}
                     </div>
-                
+
                     <div className="chat-messages">
                         {messages.length === 0 ? (
                             <p>Start chatting to manage your emails.</p>
@@ -207,7 +207,7 @@ function Chat({ isAuthenticated, userEmail }) {
                         )}
                         <div ref={messagesEndRef} />
                     </div>
-                
+
                 <div className="chat-input-container">
                     <input
                         type="text"
@@ -219,7 +219,7 @@ function Chat({ isAuthenticated, userEmail }) {
                         disabled={isLoading}
                     />
                     {isLoading ? (
-                        <button 
+                        <button
                             onClick={stopStreaming}
                             className="send-button pointer-button button"
                             style={{ backgroundColor: '#f44366' }}
@@ -227,8 +227,8 @@ function Chat({ isAuthenticated, userEmail }) {
                             Stop
                         </button>
                     ) : (
-                        <button 
-                            onClick={sendMessage} 
+                        <button
+                            onClick={sendMessage}
                             disabled={!inputMessage.trim()}
                             className="send-button pointer-button button"
                         >

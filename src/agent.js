@@ -22,7 +22,7 @@ let isInitializing = false;
 const initializeAgent = async () => {
     // return existing agent if already initialized
     if (agentInstance) return agentInstance;
-    
+
     // wait for existing initialization to complete if in progress
     if (isInitializing) {
         while (isInitializing) {
@@ -32,7 +32,7 @@ const initializeAgent = async () => {
     }
 
     isInitializing = true;
-    
+
     try {
         // create the language model instance
         const model = new ChatOpenAI({
@@ -41,7 +41,7 @@ const initializeAgent = async () => {
 
         // set up transport to connect to MCP server
         const transport = new StreamableHTTPClientTransport(new URL(MCP_SERVER_URL));
-        
+
         // create MCP client for email tools
         clientInstance = new Client({
             name: "email-assistant",
@@ -50,7 +50,7 @@ const initializeAgent = async () => {
 
         // connect the client to the MCP server
         await clientInstance.connect(transport);
-        
+
         // load email tools from the MCP server
         const tools = await loadMcpTools("email", clientInstance, {
             throwOnLoadError: true,
@@ -71,7 +71,7 @@ const initializeAgent = async () => {
                 }
             ]
         });
-        
+
         // return the agent instance
         return agentInstance;
     } catch (error) {
@@ -87,23 +87,23 @@ export const streamAgent = async (message, onChunk, threadId) => {
     try {
         // get the initialized agent instance
         const agent = await initializeAgent();
-        
+
         // start streaming the agent response
         const stream = await agent.stream(
             { messages: [{ role: "user", content: message }] },
-            { 
+            {
                 configurable: { thread_id: threadId },
                 streamMode: "values"
             }
         );
 
         let fullResponse = "";
-        
+
         // process each chunk of the streaming response
         for await (const chunk of stream) {
             if (chunk.messages && chunk.messages.length > 0) {
                 const lastMessage = chunk.messages[chunk.messages.length - 1];
-                
+
                 // send new content to client if it has changed
                 if (lastMessage.content && lastMessage.content !== fullResponse) {
                     fullResponse = lastMessage.content;
@@ -111,7 +111,7 @@ export const streamAgent = async (message, onChunk, threadId) => {
                 }
             }
         }
-        
+
         return fullResponse;
     } catch (error) {
         console.error("Error streaming agent:", error);

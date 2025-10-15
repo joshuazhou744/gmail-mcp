@@ -26,11 +26,11 @@ let authenticatedUserEmail = null;
 async function initializeAuthentication() {
     try {
         console.log('Initializing Gmail authentication...');
-        
+
         // authenticate using CLI flow will prompt user if no stored tokens
         gmailClient = await cliAuth.getGmailClient();
         authenticatedUserEmail = await cliAuth.getUserEmail(gmailClient);
-        
+
         console.log(`✅ Successfully authenticated as: ${authenticatedUserEmail}`);
         return true;
     } catch (error) {
@@ -121,16 +121,16 @@ class Tools {
                     data: null
                 };
             }
-            
+
             // fetch the email from Gmail API
             const message = await gmailClient.users.messages.get({
                 userId: "me",
                 id: emailId,
             });
-            
+
             const headers = message.data.payload.headers;
             const getHeader = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || "";
-            
+
             // extract email body content
             let body = "";
             if (message.data.payload.body.data) {
@@ -148,7 +148,7 @@ class Tools {
                     }
                 }
             }
-            
+
             // return structured email data
             return {
                 success: true,
@@ -184,25 +184,25 @@ class Tools {
                     data: null
                 };
             }
-    
+
             // get the original email details
             const originalEmail = await this.getEmail(emailId);
-            
+
             if (!originalEmail.success) {
                 return originalEmail; // return the error response from getEmail
             }
-    
+
             // extract sender's email address from the original email
             const fromEmail = originalEmail.data.sender;
-            
+
             // helper function to extract email from "Name <email@domain.com>" format
             const extractEmail = (emailString) => {
                 const match = emailString.match(/<(.+?)>/);
                 return match ? match[1] : emailString;
             };
-            
+
             const replyTo = extractEmail(fromEmail);
-    
+
             // create the reply message with proper headers
             const replyMessage = [
                 `To: ${replyTo}`,
@@ -210,19 +210,19 @@ class Tools {
                 '',
                 content
             ].join('\r\n');
-    
+
             // encode the reply message
             const encodedMessage = this.toBase64Url(replyMessage);
-    
+
             // send the reply via Gmail API
             const response = await gmailClient.users.messages.send({
                 userId: "me",
-                requestBody: { 
+                requestBody: {
                     raw: encodedMessage,
-                    threadId: originalEmail.data.threadId 
+                    threadId: originalEmail.data.threadId
                 },
             });
-    
+
             return {
                 success: true,
                 message: "Reply sent successfully!",
@@ -255,16 +255,16 @@ class Tools {
                     data: null
                 };
             }
-            
+
             // get list of email IDs matching the search query
             const listResp = await gmailClient.users.messages.list({
                 userId: "me",
                 q: query,
                 maxResults: maxResults,
             });
-            
+
             const messages = listResp.data.messages || [];
-            
+
             if (messages.length === 0) {
                 return {
                     success: true,
@@ -277,7 +277,7 @@ class Tools {
                     }
                 };
             }
-            
+
             // get full details for each email found
             const emailDetails = [];
             for (const {id} of messages) {
@@ -287,9 +287,9 @@ class Tools {
                 if (!emailResponse.success) {
                     return emailResponse; // return the error response
                 }
-                
+
                 const email = emailResponse.data;
-                
+
                 // build email summary object
                 emailDetails.push({
                     id: email.id,
@@ -302,7 +302,7 @@ class Tools {
                     threadId: email.threadId
                 });
             }
-            
+
             return {
                 success: true,
                 message: `Found ${emailDetails.length} emails matching the search query`,
@@ -367,7 +367,7 @@ async function createMcpServer() {
             const result = await tools.createEmail(receivers, carbonCopy || [], subject, content);
             return {
                 content: [{
-                    type: "text", 
+                    type: "text",
                     text: JSON.stringify(result, null, 2)
                 }]
             };
@@ -387,7 +387,7 @@ async function createMcpServer() {
             const result = await tools.getEmail(emailId);
             return {
                 content: [{
-                    type: "text", 
+                    type: "text",
                     text: JSON.stringify(result, null, 2)
                 }]
             };
@@ -408,7 +408,7 @@ async function createMcpServer() {
             const result = await tools.replyEmail(emailId, content);
             return {
                 content: [{
-                    type: "text", 
+                    type: "text",
                     text: JSON.stringify(result, null, 2)
                 }]
             };
@@ -429,7 +429,7 @@ async function createMcpServer() {
             const result = await tools.searchEmail(query, maxResults);
             return {
                 content: [{
-                    type: "text", 
+                    type: "text",
                     text: JSON.stringify(result, null, 2)
                 }]
             };
@@ -445,7 +445,7 @@ app.use(express.json());
 
 // configure CORS middleware for cross-origin requests
 app.use(cors({
-    origin: "http://localhost:3000", // allow requests from our React app
+    origin: "*", // allow requests from anywhere for development
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
         'Origin',
@@ -529,8 +529,8 @@ app.post('/mcp', async (req, res) => {
 
 // simple authentication status endpoint for frontend
 app.get('/status', (_req, res) => {
-    res.json({ 
-        authenticated: !!gmailClient, 
+    res.json({
+        authenticated: !!gmailClient,
         userEmail: authenticatedUserEmail,
         method: 'cli'
     });
@@ -550,23 +550,23 @@ app.post('/logout', async (_req, res) => {
         // clear stored authentication tokens
         await cliAuth.clearStoredTokens();
         console.log('✅ Logged out successfully.');
-        
+
         // send response to client
-        res.json({ 
-            success: true, 
-            message: 'Logged out successfully. Please restart the server to re-authenticate.' 
+        res.json({
+            success: true,
+            message: 'Logged out successfully. Please restart the server to re-authenticate.'
         });
 
         // exit server after short delay to allow response to be sent
         setTimeout(() => {
             process.exit(0);
         }, 1000);
-        
+
     } catch (error) {
         console.error('❌ Logout error:', error.message);
-        res.status(500).json({ 
-            error: 'Logout failed', 
-            message: error.message 
+        res.status(500).json({
+            error: 'Logout failed',
+            message: error.message
         });
     }
 });
@@ -575,12 +575,12 @@ app.post('/logout', async (_req, res) => {
 app.post('/api/chat/stream', async (req, res) => {
     try {
         const { message, sessionId } = req.body;
-        
+
         // validate that message is provided
         if (!message) {
             return res.status(400).json({ error: 'Message is required' });
         }
-        
+
         // generate unique session ID if not provided
         const actualSessionId = sessionId || `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -594,13 +594,13 @@ app.post('/api/chat/stream', async (req, res) => {
         });
 
         // send initial connection confirmation with session ID
-        res.write(`data: ${JSON.stringify({ 
+        res.write(`data: ${JSON.stringify({
             type: 'connected',
-            sessionId: actualSessionId 
+            sessionId: actualSessionId
         })}\n\n`);
 
         let fullResponse = '';
-        
+
         try {
             // stream agent response with realtime updates
             await streamAgent(
@@ -619,17 +619,17 @@ app.post('/api/chat/stream', async (req, res) => {
             );
 
             // send completion signal with final response
-            res.write(`data: ${JSON.stringify({ 
-                type: 'complete', 
+            res.write(`data: ${JSON.stringify({
+                type: 'complete',
                 content: fullResponse,
                 sessionId: actualSessionId,
                 timestamp: new Date().toISOString()
             })}\n\n`);
-            
+
         } catch (streamError) {
             // send error message to client
-            res.write(`data: ${JSON.stringify({ 
-                type: 'error', 
+            res.write(`data: ${JSON.stringify({
+                type: 'error',
                 error: streamError.message,
             })}\n\n`);
         }
@@ -638,9 +638,9 @@ app.post('/api/chat/stream', async (req, res) => {
     } catch (error) {
         console.error('Stream error:', error);
         if (!res.headersSent) {
-            res.status(500).json({ 
-                error: 'Internal server error', 
-                message: error.message 
+            res.status(500).json({
+                error: 'Internal server error',
+                message: error.message
             });
         }
     }
